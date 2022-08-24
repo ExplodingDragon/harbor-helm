@@ -1,0 +1,381 @@
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: "{{var.global.tls-name}}"
+      notarySecretName: "{{var.global.tls-name}}"
+  ingress:
+    hosts:
+      core: harbor.{{var.global.pub-host}}
+      notary: notary.{{var.global.pub-host}}
+    controller: default
+    className: "nginx"
+    annotations:
+      ingress.kubernetes.io/ssl-redirect: "true"
+      ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    notary:
+      annotations: {}
+      labels: {}
+    harbor:
+      annotations: {}
+      labels: {}
+# The external URL for Harbor core service. It is used to
+# 1) populate the docker/helm commands showed on portal
+# 2) populate the token service URL returned to docker/notary client
+#
+# Format: protocol://domain[:port]. Usually:
+# 1) if "expose.type" is "ingress", the "domain" should be
+# the value of "expose.ingress.hosts.core"
+# 2) if "expose.type" is "clusterIP", the "domain" should be
+# the value of "expose.clusterIP.name"
+# 3) if "expose.type" is "nodePort", the "domain" should be
+# the IP address of k8s node
+#
+# If Harbor is deployed behind the proxy, set it as the URL of proxy
+externalURL: https://harbor.{{var.global.pub-host}}
+
+# The internal TLS used for harbor components secure communicating. In order to enable https
+# in each components tls cert files need to provided in advance.
+internalTLS:
+  # If internal TLS enabled
+  enabled: false
+ipFamily:
+  ipv6:
+    enabled: true
+  ipv4:
+    enabled: true
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      storageClass: "{{var.storage.class.security}}"
+      accessMode: ReadWriteOnce
+      size: 50Gi
+      annotations: {}
+    chartmuseum:
+      storageClass: "{{var.storage.class.security}}"
+      accessMode: ReadWriteOnce
+      size: 5Gi
+      annotations: {}
+    jobservice:
+      storageClass: "{{var.storage.class.security}}"
+      accessMode: ReadWriteOnce
+      size: 1Gi
+
+    redis:
+      storageClass: "{{var.storage.class.security}}"
+      accessMode: ReadWriteOnce
+      size: 1Gi
+      annotations: {}
+    trivy:
+      storageClass: "{{var.storage.class.fast}}"
+      accessMode: ReadWriteOnce
+      size: 5Gi
+      annotations: {}
+  # Define which storage backend is used for registry and chartmuseum to store
+  # images and charts. Refer to
+  # https://github.com/docker/distribution/blob/master/docs/configuration.md#storage
+  # for the detail.
+  imageChartStorage:
+    disableredirect: false
+    type: filesystem
+    filesystem:
+      rootdirectory: /storage
+
+imagePullPolicy: IfNotPresent
+
+updateStrategy:
+  type: RollingUpdate
+
+logLevel: info
+
+harborAdminPassword: "{{var.harbor.admin.password}}"
+
+
+proxy:
+  httpProxy:
+  httpsProxy:
+  noProxy: 127.0.0.1,localhost,.local,.internal
+  components:
+    - core
+    - jobservice
+    - trivy
+
+# Run the migration job via helm hook
+enableMigrateHelmHook: false
+
+
+
+
+portal:
+  image:
+    repository: goharbor/harbor-portal
+    tag: v2.5.3
+  automountServiceAccountToken: false
+  replicas: 1
+  revisionHistoryLimit: 10
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  priorityClassName:
+
+core:
+  image:
+    repository: goharbor/harbor-core
+    tag: v2.5.3
+  automountServiceAccountToken: false
+  replicas: 1
+  revisionHistoryLimit: 10
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 10
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  secret: ""
+  secretName: ""
+  xsrfKey: ""
+  priorityClassName:
+  artifactPullAsyncFlushDuration:
+
+jobservice:
+  image:
+    repository: goharbor/harbor-jobservice
+    tag: v2.5.3
+  replicas: 1
+  revisionHistoryLimit: 10
+  # set the service account to be used, default if left empty
+  serviceAccountName: ""
+  # mount the service account token
+  automountServiceAccountToken: false
+  maxJobWorkers: 10
+  # The logger for jobs: "file", "database" or "stdout"
+  jobLoggers:
+    - file
+    - stdout
+    # - database
+    # - stdout
+  loggerSweeperDuration: 14 #days
+
+  # resources:
+  #   requests:
+  #     memory: 256Mi
+  #     cpu: 100m
+  tolerations: []
+  affinity: {}
+  ## Additional deployment annotations
+  podAnnotations: {}
+
+registry:
+  serviceAccountName: ""
+  automountServiceAccountToken: false
+  registry:
+    image:
+      repository: goharbor/registry-photon
+      tag: v2.5.3
+  controller:
+    image:
+      repository: goharbor/harbor-registryctl
+      tag: v2.5.3
+
+  replicas: 1
+  revisionHistoryLimit: 10
+  tolerations: []
+  affinity: {}
+  ## Additional deployment annotations
+  podAnnotations: {}
+  upload_purging:
+    enabled: true
+    # remove files in _upload directories which exist for a period of time, default is one week.
+    age: 168h
+    # the interval of the purge operations
+    interval: 24h
+    dryrun: false
+
+chartmuseum:
+  enabled: true
+  serviceAccountName: ""
+  automountServiceAccountToken: false
+  absoluteUrl: false
+  image:
+    repository: goharbor/chartmuseum-photon
+    tag: v2.5.3
+  replicas: 1
+  revisionHistoryLimit: 10
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  priorityClassName:
+  indexLimit: 0
+
+trivy:
+  # enabled the flag to enable Trivy scanner
+  enabled: true
+  image:
+    repository: goharbor/trivy-adapter-photon
+    tag: v2.5.3
+  replicas: 1
+  debugMode: false
+  vulnType: "os,library"
+  severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  ignoreUnfixed: false
+  insecure: false
+  # gitHubToken the GitHub access token to download Trivy DB
+  #
+  # Trivy DB contains vulnerability information from NVD, Red Hat, and many other upstream vulnerability databases.
+  # It is downloaded by Trivy from the GitHub release page https://github.com/aquasecurity/trivy-db/releases and cached
+  # in the local file system (`/home/scanner/.cache/trivy/db/trivy.db`). In addition, the database contains the update
+  # timestamp so Trivy can detect whether it should download a newer version from the Internet or use the cached one.
+  # Currently, the database is updated every 12 hours and published as a new release to GitHub.
+  #
+  # Anonymous downloads from GitHub are subject to the limit of 60 requests per hour. Normally such rate limit is enough
+  # for production operations. If, for any reason, it's not enough, you could increase the rate limit to 5000
+  # requests per hour by specifying the GitHub access token. For more details on GitHub rate limiting please consult
+  # https://developer.github.com/v3/#rate-limiting
+  #
+  # You can create a GitHub token by following the instructions in
+  # https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line
+  gitHubToken: ""
+  # skipUpdate the flag to disable Trivy DB downloads from GitHub
+  #
+  # You might want to set the value of this flag to `true` in test or CI/CD environments to avoid GitHub rate limiting issues.
+  # If the value is set to `true` you have to manually download the `trivy.db` file and mount it in the
+  # `/home/scanner/.cache/trivy/db/trivy.db` path.
+  skipUpdate: false
+  # The offlineScan option prevents Trivy from sending API requests to identify dependencies.
+  #
+  # Scanning JAR files and pom.xml may require Internet access for better detection, but this option tries to avoid it.
+  # For example, the offline mode will not try to resolve transitive dependencies in pom.xml when the dependency doesn't
+  # exist in the local repositories. It means a number of detected vulnerabilities might be fewer in offline mode.
+  # It would work if all the dependencies are in local.
+  # This option doesn’t affect DB download. You need to specify skipUpdate as well as offlineScan in an air-gapped environment.
+  offlineScan: false
+  # The duration to wait for scan completion
+  timeout: 5m0s
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  tolerations: []
+  affinity: {}
+  ## Additional deployment annotations
+  podAnnotations: {}
+  ## The priority class to run the pod as
+  priorityClassName:
+
+notary:
+  enabled: true
+  server:
+    # set the service account to be used, default if left empty
+    serviceAccountName: ""
+    # mount the service account token
+    automountServiceAccountToken: false
+    image:
+      repository: goharbor/notary-server-photon
+      tag: v2.5.3
+    replicas: 1
+    # resources:
+    #  requests:
+    #    memory: 256Mi
+    #    cpu: 100m
+    tolerations: []
+    affinity: {}
+    ## Additional deployment annotations
+    podAnnotations: {}
+    ## The priority class to run the pod as
+    priorityClassName:
+  signer:
+    # set the service account to be used, default if left empty
+    serviceAccountName: ""
+    # mount the service account token
+    automountServiceAccountToken: false
+    image:
+      repository: goharbor/notary-signer-photon
+      tag: v2.5.3
+    replicas: 1
+    # resources:
+    #  requests:
+    #    memory: 256Mi
+    #    cpu: 100m
+    tolerations: []
+    affinity: {}
+    ## Additional deployment annotations
+    podAnnotations: {}
+    ## The priority class to run the pod as
+    priorityClassName:
+  # Fill the name of a kubernetes secret if you want to use your own
+  # TLS certificate authority, certificate and private key for notary
+  # communications.
+  # The secret must contain keys named ca.crt, tls.crt and tls.key that
+  # contain the CA, certificate and private key.
+  # They will be generated if not set.
+  secretName: ""
+
+database:
+  # if external database is used, set "type" to "external"
+  # and fill the connection informations in "external" section
+  type: external
+  external:
+    host: "{{var.harbor.postgres.host}}"
+    port: "{{var.harbor.postgres.port}}"
+    username: "{{var.harbor.postgres.username}}"
+    password: "{{var.harbor.postgres.password}}"
+    coreDatabase: "registry"
+    notaryServerDatabase: "notary_server"
+    notarySignerDatabase: "notary_signer"
+    sslmode: "disable"
+  maxIdleConns: 100
+  maxOpenConns: 900
+  podAnnotations: {}
+
+redis:
+  type: internal
+  internal:
+    serviceAccountName: ""
+    automountServiceAccountToken: false
+    image:
+      repository: goharbor/redis-photon
+      tag: v2.5.3
+    tolerations: []
+    affinity: {}
+    ## The priority class to run the pod as
+    priorityClassName:
+
+exporter:
+  replicas: 1
+  revisionHistoryLimit: 10
+  podAnnotations: {}
+  serviceAccountName: ""
+  automountServiceAccountToken: false
+  image:
+    repository: goharbor/harbor-exporter
+    tag: v2.5.3
+  tolerations: []
+  affinity: {}
+  cacheDuration: 23
+  cacheCleanInterval: 14400
+  ## The priority class to run the pod as
+  priorityClassName:
+
+metrics:
+  enabled: true
+  core:
+    path: /metrics
+    port: 8001
+  registry:
+    path: /metrics
+    port: 8001
+  jobservice:
+    path: /metrics
+    port: 8001
+  exporter:
+    path: /metrics
+    port: 8001

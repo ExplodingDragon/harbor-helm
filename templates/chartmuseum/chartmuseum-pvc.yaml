@@ -18,7 +18,7 @@ metadata:
 {{ include "harbor.labels" . | indent 4 }}
     component: chartmuseum
 spec:
-  accessModes: 
+  accessModes:
     - {{ $chartmuseum.accessMode }}
   resources:
     requests:
@@ -27,7 +27,7 @@ spec:
     {{- if eq "-" $chartmuseum.storageClass }}
   storageClassName: ""
     {{- else }}
-  storageClassName: {{ $chartmuseum.storageClass }}
+  storageClassName: '{{ $chartmuseum.storageClass }}'
     {{- end }}
   {{- end }}
 {{- end }}

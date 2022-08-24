@@ -63,7 +63,7 @@ spec:
   {{- end }}
   {{- if $tls.enabled }}
   tls:
-  - secretName: {{ template "harbor.tlsCoreSecretForIngress" . }}
+  - secretName: '{{ template "harbor.tlsCoreSecretForIngress" . }}'
     {{- if $ingress.hosts.core }}
     hosts:
     - {{ $ingress.hosts.core }}
@@ -179,7 +179,7 @@ spec:
   {{- end }}
   {{- if $tls.enabled }}
   tls:
-  - secretName: {{ template "harbor.tlsNotarySecretForIngress" . }}
+  - secretName: '{{ template "harbor.tlsNotarySecretForIngress" . }}'
     {{- if $ingress.hosts.notary }}
     hosts:
     - {{ $ingress.hosts.notary }}

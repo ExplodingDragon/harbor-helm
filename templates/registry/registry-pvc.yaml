@@ -16,7 +16,7 @@ metadata:
 {{ include "harbor.labels" . | indent 4 }}
     component: registry
 spec:
-  accessModes: 
+  accessModes:
     - {{ $registry.accessMode }}
   resources:
     requests:
@@ -25,7 +25,7 @@ spec:
     {{- if eq "-" $registry.storageClass }}
   storageClassName: ""
     {{- else }}
-  storageClassName: {{ $registry.storageClass }}
+  storageClassName: '{{ $registry.storageClass }}'
     {{- end }}
   {{- end }}
 {{- end }}
